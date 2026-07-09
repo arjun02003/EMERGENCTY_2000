@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import API from "../api/.api";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Shield, User, Hospital, UserCog } from 'lucide-react';
 
@@ -30,14 +30,11 @@ const Login = () => {
     try {
       setIsLoading(true);
 
-      const response = await axios.post(
-        "https://suraksha-emergency-4.onrender.com/api/auth/login",
-        {
-          email,
-          password,
-          role: selectedRole,
-        }
-      );
+      const response = await API.post("/auth/login", {
+        email,
+        password,
+        role: selectedRole,
+      });
 
       // Save JWT Token
       localStorage.setItem("token", response.data.token);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import API from "../api/.api";
 import { 
   Bed, Ambulance, AlertTriangle, User, CheckCircle, XCircle, LogOut, Bell, Edit, Trash 
 } from "lucide-react";
@@ -49,8 +49,8 @@ export default function HospitalDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const res = await axios.get(
-        "https://suraksha-emergency-4.onrender.com/api/emergency/pending",
+      const res = await API.get(
+        "/emergency/pending",
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -74,7 +74,7 @@ export default function HospitalDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const response = await axios.get("https://suraksha-emergency-4.onrender.com/api/hospital/me", {
+      const response = await API.get("/hospital/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -120,13 +120,9 @@ export default function HospitalDashboard() {
         availableAmbulances: Number(resourceForm.availableAmbulances),
       };
 
-      await axios.put(
-        `https://suraksha-emergency-4.onrender.com/api/hospital/${hospitalData._id}`,
-        payload,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      await API.put(`/hospital/${hospitalData._id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       await fetchHospitalProfile();
       alert("Resources updated successfully.");
@@ -143,7 +139,7 @@ export default function HospitalDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const response = await axios.get("https://suraksha-emergency-4.onrender.com/api/ambulance/my-ambulances", {
+      const response = await API.get("/ambulance/my-ambulances", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setAmbulances(response.data.ambulances || []);
@@ -174,13 +170,13 @@ export default function HospitalDashboard() {
       };
 
       if (editingAmbulance) {
-        await axios.put(`https://suraksha-emergency-4.onrender.com/api/ambulance/update/${editingAmbulance._id}`, payload, {
+        await API.put(`/ambulance/update/${editingAmbulance._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setEditingAmbulance(null);
         alert("Ambulance updated successfully.");
       } else {
-        await axios.post("https://suraksha-emergency-4.onrender.com/api/ambulance/create", payload, {
+        await API.post("/ambulance/create", payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         alert("Ambulance added successfully.");
@@ -222,7 +218,7 @@ export default function HospitalDashboard() {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Please login again");
 
-      await axios.delete(`https://suraksha-emergency-4.onrender.com/api/ambulance/delete/${id}`, {
+      await API.delete(`/ambulance/delete/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       await fetchAmbulances();
@@ -259,8 +255,8 @@ export default function HospitalDashboard() {
         return;
       }
 
-      const response = await axios.put(
-        `https://suraksha-emergency-4.onrender.com/api/emergency/accept/${id}`,
+      const response = await API.put(
+        `/emergency/accept/${id}`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -302,8 +298,8 @@ export default function HospitalDashboard() {
         return;
       }
 
-      await axios.put(
-        `https://suraksha-emergency-4.onrender.com/api/emergency/reject/${id}`,
+      await API.put(
+        `/emergency/reject/${id}`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` }

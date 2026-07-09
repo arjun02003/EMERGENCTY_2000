@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import API from "../api/.api";
 import { 
   User, Phone, Clock, MapPin, Hospital, AlertTriangle, 
   History, LogOut, Heart, Ambulance 
@@ -66,8 +66,8 @@ export default function UserDashboard() {
         async (position) => {
           const { latitude, longitude } = position.coords;
 
-          const response = await axios.post(
-            "https://suraksha-emergency-4.onrender.com/api/emergency/create",
+          const response = await API.post(
+            "/emergency/create",
             { latitude, longitude },
             {
               headers: { Authorization: `Bearer ${token}` },

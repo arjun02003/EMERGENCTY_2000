@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import API from "../api/.api";
 import { 
   Users, Hospital, AlertTriangle, Ambulance, 
   TrendingUp, Activity, LogOut, Shield, Clock 
@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   const fetchHospitals = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://https://suraksha-emergency-5.onrender.com:5000/api/hospital", {
+      const response = await API.get("/hospital", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
           .filter(Boolean),
       };
 
-      await axios.post("https://suraksha-emergency-4.onrender.com/api/admin/create-hospital", payload, {
+      await API.post("/admin/create-hospital", payload, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

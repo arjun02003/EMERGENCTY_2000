@@ -1,8 +1,8 @@
-services:
+﻿services:
   - type: static
     name: suraksha-frontend
     env: static
-    root: .
+    root: frontend
     buildCommand: npm install && npm run build
     publishPath: dist
 
@@ -13,3 +13,5 @@ services:
     buildCommand: npm install
     startCommand: npm start
     plan: starter
+
+

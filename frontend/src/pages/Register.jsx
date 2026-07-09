@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { User, Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react";
-import axios from "axios";
+import API from "../api/.api";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -69,16 +69,13 @@ export default function Register() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(
-        "https://suraksha-emergency-4.onrender.com/api/auth/register",
-        {
-          name: formData.fullName,
-          email: formData.email,
-          phone: formData.phone,
-          password: formData.password,
-          role: "user",
-        }
-      );
+      const response = await API.post("/auth/register", {
+        name: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: "user",
+      });
 
       alert(response.data.message);
       setSuccess(true);
