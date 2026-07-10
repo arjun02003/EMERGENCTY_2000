@@ -7,19 +7,14 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const [stats] = useState({
-    totalUsers: 12480,
-    totalHospitals: 87,
-    activeEmergencies: 42,
-    availableAmbulances: 156
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalHospitals: 0,
+    activeEmergencies: 0,
+    availableAmbulances: 0,
   });
 
-  const [recentRequests] = useState([
-    { id: 1, patient: "Aarav Patel", hospital: "Apollo Hospital", type: "Accident", time: "3 min ago", status: "Critical" },
-    { id: 2, patient: "Priya Sharma", hospital: "Fortis Hospital", type: "Cardiac", time: "12 min ago", status: "High" },
-    { id: 3, patient: "Rohan Kumar", hospital: "Manipal Hospital", type: "Trauma", time: "28 min ago", status: "Medium" },
-    { id: 4, patient: "Sneha Rao", hospital: "Apollo Hospital", type: "Respiratory", time: "41 min ago", status: "High" },
-  ]);
+  const [recentRequests] = useState([]);
 
   const [hospitals, setHospitals] = useState([]);
   const [showHospitalModal, setShowHospitalModal] = useState(false);

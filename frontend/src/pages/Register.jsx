@@ -75,6 +75,12 @@ export default function Register() {
         phone: formData.phone,
         password: formData.password,
         role: "user",
+        // BUG FIX: These three fields were collected in the form and validated,
+        // but were never included in the API call — they were silently dropped,
+        // so MongoDB never received or stored them.
+        bloodGroup: formData.bloodGroup,
+        emergencyContactName: formData.emergencyContactName,
+        emergencyContactNumber: formData.emergencyContactNumber,
       });
 
       alert(response.data.message);

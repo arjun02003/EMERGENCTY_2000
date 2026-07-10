@@ -1,20 +1,24 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import API from "../api/.api";
+import { io } from "socket.io-client";
 import { 
   User, Phone, Clock, MapPin, Hospital, AlertTriangle, 
-  History, LogOut, Heart, Ambulance 
+  History, LogOut, Heart, Ambulance, Mail, Shield, Calendar, Droplets
 } from "lucide-react";
 
 export default function UserDashboard() {
-  const [user, setUser] = useState({
-    name: "Rahul Sharma",
-    bloodGroup: "O+",
-    emergencyContact: { name: "Priya Sharma", phone: "+91 98765 43210" }
-  });
+  // BUG FIX: Original code initialised `user` with hardcoded fake data
+  // ("Rahul Sharma", "O+", etc.). These defaults were always visible because
+  // the real data from localStorage never matched the expected nested shape
+  // (user.emergencyContact.name vs the flat fields the backend actually returns).
+  // Initialise as null; show a loading state until real data is ready.
+  const [user, setUser] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   const [isEmergencyActive, setIsEmergencyActive] = useState(false);
   const [assignedHospital, setAssignedHospital] = useState(null);
+  const [currentEmergencyId, setCurrentEmergencyId] = useState(null);
   const [ambulanceInfo, setAmbulanceInfo] = useState({
     number: "KA-05-AB-6789",
     driver: "Ramesh Kumar",
@@ -26,30 +30,101 @@ export default function UserDashboard() {
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
 
-  // Load user from localStorage
+  const navigate = useNavigate();
+
+  // BUG FIX: Load user from localStorage first (instant), then verify/refresh
+  // from the GET /me endpoint so the dashboard always shows MongoDB-accurate data.
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      // Not logged in — send to login
+      navigate("/login");
+      return;
+    }
+
+    // Seed from localStorage immediately so the UI isn't blank
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (_) {
+        // Corrupt data — ignore; /me will populate it
+      }
     }
-  }, []);
 
-  const emergencyHistory = [
-    {
-      id: 1,
-      date: "18 Jun 2026",
-      hospital: "Apollo Hospital, Bangalore",
-      status: "Resolved",
-      time: "14:32"
-    },
-    {
-      id: 2,
-      date: "05 May 2026",
-      hospital: "Fortis Hospital",
-      status: "Resolved",
-      time: "09:15"
-    },
-  ];
+    // Fetch authoritative profile from MongoDB
+    API.get("/auth/me")
+      .then((res) => {
+        if (res.data?.user) {
+          setUser(res.data.user);
+          // Keep localStorage in sync
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to refresh profile:", err.message);
+        // If /me fails with 401 the response interceptor already clears
+        // localStorage and redirects to /login — nothing extra needed here.
+      })
+      .finally(() => {
+        setProfileLoading(false);
+      });
+  }, [navigate]);
+
+  // Socket.IO: connect when user is available
+  useEffect(() => {
+    if (!user) return;
+    const token = localStorage.getItem("token");
+    const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    const socket = io(socketUrl, {
+      auth: { token },
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      socket.emit("join", `user:${user._id || user.id}`);
+    });
+
+    socket.on("emergency_status", (payload) => {
+      console.log("Socket emergency_status:", payload);
+      const { status, emergency } = payload;
+      if (status === "SEARCHING_HOSPITAL") {
+        setIsEmergencyActive(true);
+        setAssignedHospital({ name: "Searching for hospitals...", distance: "Finding..." });
+      } else if (status === "WAITING_FOR_ACCEPTANCE") {
+        setIsEmergencyActive(true);
+        setAssignedHospital({ name: "Awaiting hospital response", distance: "Finding..." });
+      } else if (status === "AMBULANCE_ASSIGNED") {
+        setIsEmergencyActive(true);
+        setAssignedHospital({ name: emergency.assignedHospital?.name || "Assigned Hospital", distance: emergency.distance ? `${emergency.distance.toFixed(2)} km` : "-" });
+        setAmbulanceInfo({
+          number: emergency.ambulance?.vehicleNumber || "-",
+          driver: emergency.ambulance?.driverName || "-",
+          eta: "Calculating",
+          status: "On the way",
+        });
+      } else if (status === "NO_HOSPITAL_AVAILABLE") {
+        setIsEmergencyActive(false);
+        setAssignedHospital(null);
+        alert("No hospital available within the configured radius.");
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
+
+  // No demo hospital history; real history should come from server-side emergencies
+  const emergencyHistory = [];
+
+  // BUG FIX: Logout was a plain <Link to="/"> that navigated home but never
+  // cleared localStorage. The user would appear logged in on any return visit.
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/");
+  };
 
   const handleSOS = async () => {
     try {
@@ -77,16 +152,9 @@ export default function UserDashboard() {
           alert(response.data.message || "Emergency SOS Activated!");
 
           setIsEmergencyActive(true);
-          
-          // ✅ Updated according to your new backend response structure
-          setAssignedHospital({
-            name:
-              response.data.assignedHospital?.name || "Nearest Hospital",
-            distance:
-              response.data.emergency?.distance
-                ? `${response.data.emergency.distance.toFixed(2)} km`
-                : "Finding...",
-          });
+          setCurrentEmergencyId(response.data.emergency?._id || null);
+          // show searching state until socket updates arrive
+          setAssignedHospital({ name: "Searching for hospitals...", distance: "Finding..." });
 
           setShowSOSModal(false);
           setIsActivating(false);
@@ -108,6 +176,20 @@ export default function UserDashboard() {
     }
   };
 
+  // Helper: format createdAt date nicely
+  const formatJoinedDate = (dateStr) => {
+    if (!dateStr) return "—";
+    try {
+      return new Date(dateStr).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch (_) {
+      return "—";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Navbar */}
@@ -122,17 +204,19 @@ export default function UserDashboard() {
                 <User size={18} className="text-red-500" />
               </div>
               <div>
+                {/* BUG FIX: was user?.name with no null guard on user */}
                 <p className="text-sm font-medium">{user?.name || "User"}</p>
                 <p className="text-xs text-slate-400">User</p>
               </div>
             </div>
-            <Link
-              to="/"
+            {/* BUG FIX: was <Link to="/"> which never cleared localStorage */}
+            <button
+              onClick={handleLogout}
               className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 rounded-2xl text-sm font-medium transition-colors"
             >
               <LogOut size={18} />
               Logout
-            </Link>
+            </button>
           </div>
         </div>
       </nav>
@@ -151,7 +235,7 @@ export default function UserDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* SOS Button - Prominent */}
+          {/* SOS Button - Prominent — UNCHANGED */}
           <div className="lg:col-span-5">
             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-10 flex flex-col items-center justify-center h-full min-h-[420px] relative overflow-hidden">
               <div className="absolute inset-0 bg-red-500/5" />
@@ -179,8 +263,9 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Medical Profile */}
+          {/* Right column */}
           <div className="lg:col-span-7 space-y-6">
+            {/* Medical Profile — expanded to show all required user info */}
             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8">
               <div className="flex items-start gap-6">
                 <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center flex-shrink-0">
@@ -188,34 +273,112 @@ export default function UserDashboard() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-2xl font-semibold">Medical Profile</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-6">
-                    <div>
-                      <p className="text-xs text-slate-400">BLOOD GROUP</p>
-                      <p className="text-4xl font-bold text-red-500 mt-1">
-                        {user?.bloodGroup || "N/A"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">EMERGENCY CONTACT</p>
-                      <p className="font-medium mt-1">
-                        {user?.emergencyContact?.name || "Not Added"}
-                      </p>
-                      <p className="text-red-400 text-sm">
-                        {user?.emergencyContact?.phone || "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">CURRENT STATUS</p>
-                      <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm mt-2 ${isEmergencyActive ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                        {isEmergencyActive ? "🚨 Active Emergency" : "✅ Safe"}
+
+                  {profileLoading ? (
+                    <p className="text-slate-400 mt-4 text-sm">Loading profile...</p>
+                  ) : (
+                    <>
+                      {/* Row 1 — Blood Group / Emergency Status */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-6">
+                        <div>
+                          <p className="text-xs text-slate-400">BLOOD GROUP</p>
+                          <p className="text-4xl font-bold text-red-500 mt-1">
+                            {/* BUG FIX: was user?.bloodGroup which worked, but user
+                                could still be the hardcoded fake object */}
+                            {user?.bloodGroup || "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400">EMERGENCY CONTACT</p>
+                          {/* BUG FIX: was user?.emergencyContact?.name — backend returns
+                              flat fields emergencyContactName / emergencyContactNumber */}
+                          <p className="font-medium mt-1">
+                            {user?.emergencyContactName || "Not Added"}
+                          </p>
+                          <p className="text-red-400 text-sm">
+                            {user?.emergencyContactNumber || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400">CURRENT STATUS</p>
+                          <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm mt-2 ${isEmergencyActive ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                            {isEmergencyActive ? "🚨 Active Emergency" : "✅ Safe"}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+
+                      {/* Row 2 — Full user profile details (required by spec) */}
+                      <div className="mt-6 pt-6 border-t border-slate-800">
+                        <p className="text-xs text-slate-400 mb-4 font-semibold tracking-widest">ACCOUNT DETAILS</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <User size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Full Name</p>
+                              <p className="text-sm font-medium">{user?.name || "—"}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Mail size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Email</p>
+                              <p className="text-sm font-medium break-all">{user?.email || "—"}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Phone size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Phone</p>
+                              <p className="text-sm font-medium">{user?.phone || "—"}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Shield size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Role</p>
+                              <p className="text-sm font-medium capitalize">{user?.role || "user"}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Calendar size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Joined Date</p>
+                              <p className="text-sm font-medium">{formatJoinedDate(user?.createdAt)}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Droplets size={14} className="text-slate-400" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-slate-500">Blood Group</p>
+                              <p className="text-sm font-medium">{user?.bloodGroup || "—"}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Emergency Status */}
+            {/* Emergency Status — UNCHANGED */}
             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-3">
                 <Clock size={22} className="text-red-500" />
@@ -259,7 +422,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Emergency Contacts & History */}
+          {/* Emergency Contacts & History — UNCHANGED layout, fixed field names */}
           <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8">
               <h3 className="text-xl font-semibold mb-6">Emergency Contacts</h3>
@@ -270,8 +433,10 @@ export default function UserDashboard() {
                       <Phone className="text-red-500" />
                     </div>
                     <div>
-                      <p className="font-medium">{user?.emergencyContact?.name || "Not Added"}</p>
-                      <p className="text-slate-400">{user?.emergencyContact?.phone || "-"}</p>
+                      {/* BUG FIX: was user?.emergencyContact?.name (nested object)
+                          but backend returns flat emergencyContactName */}
+                      <p className="font-medium">{user?.emergencyContactName || "Not Added"}</p>
+                      <p className="text-slate-400">{user?.emergencyContactNumber || "—"}</p>
                     </div>
                   </div>
                   <button className="text-red-500 hover:text-red-400">Call Now</button>
@@ -315,7 +480,7 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* SOS Modal */}
+      {/* SOS Modal — UNCHANGED */}
       {showSOSModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-slate-900 border border-red-500/30 rounded-3xl max-w-md w-full p-8">

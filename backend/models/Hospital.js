@@ -67,6 +67,16 @@ const hospitalSchema = new mongoose.Schema(
       default: true,
     },
 
+    emergencyContactName: {
+      type: String,
+      default: "",
+    },
+
+    emergencyContactNumber: {
+      type: String,
+      default: "",
+    },
+
     emergencyTypes: [{
       type: String
     }],

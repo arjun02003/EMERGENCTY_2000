@@ -7,6 +7,8 @@ import SOS from "../pages/SOS";
 import UserDashboard from "../pages/UserDashboard";
 import HospitalDashboard from "../pages/HospitalDashboard";
 import AdminDashboard from "../pages/AdminDashboard";
+import DriverLogin from "../pages/DriverLogin";
+import DriverDashboard from "../pages/DriverDashboard";
 
 export default function AppRoutes() {
   return (
@@ -24,6 +26,10 @@ export default function AppRoutes() {
 
         {/* Hospital */}
         <Route path="/hospital-dashboard" element={<HospitalDashboard />} />
+
+        {/* Driver */}
+        <Route path="/driver-login" element={<DriverLogin />} />
+        <Route path="/driver-dashboard" element={<DriverDashboard />} />
 
         {/* Admin */}
         <Route path="/admin-dashboard" element={<AdminDashboard />} />

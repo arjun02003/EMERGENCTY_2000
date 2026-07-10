@@ -18,7 +18,7 @@ exports.createAmbulance = async (req, res) => {
       });
     }
 
-    const { driverName, driverPhone, vehicleNumber, vehicleType, status } = req.body;
+    const { driverName, driverPhone, driverEmail, password, vehicleNumber, vehicleType, status } = req.body;
     if (!driverName || !driverPhone || !vehicleNumber || !vehicleType || !status) {
       return res.status(400).json({
         success: false,
@@ -26,10 +26,23 @@ exports.createAmbulance = async (req, res) => {
       });
     }
 
+    let hashedPassword = "";
+    if (driverEmail || password) {
+      if (!driverEmail || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Driver email and password are required together",
+        });
+      }
+      hashedPassword = await require("bcryptjs").hash(password, 10);
+    }
+
     const ambulance = await Ambulance.create({
       hospital: hospital._id,
       driverName,
       driverPhone,
+      driverEmail: driverEmail ? driverEmail.toLowerCase().trim() : undefined,
+      password: hashedPassword,
       vehicleNumber,
       vehicleType,
       status,
@@ -114,13 +127,17 @@ exports.updateAmbulance = async (req, res) => {
       });
     }
 
-    const { driverName, driverPhone, vehicleNumber, vehicleType, status } = req.body;
+    const { driverName, driverPhone, driverEmail, password, vehicleNumber, vehicleType, status } = req.body;
     const updates = {};
     if (driverName !== undefined) updates.driverName = driverName;
     if (driverPhone !== undefined) updates.driverPhone = driverPhone;
+    if (driverEmail !== undefined) updates.driverEmail = driverEmail ? driverEmail.toLowerCase().trim() : "";
     if (vehicleNumber !== undefined) updates.vehicleNumber = vehicleNumber;
     if (vehicleType !== undefined) updates.vehicleType = vehicleType;
     if (status !== undefined) updates.status = status;
+    if (password) {
+      updates.password = await require("bcryptjs").hash(password, 10);
+    }
 
     const updatedAmbulance = await Ambulance.findByIdAndUpdate(req.params.id, updates, {
       new: true,

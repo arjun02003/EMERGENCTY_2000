@@ -7,19 +7,15 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const [stats] = useState({
-    totalUsers: 12480,
-    totalHospitals: 87,
-    activeEmergencies: 42,
-    availableAmbulances: 156
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalHospitals: 0,
+    activeEmergencies: 0,
+    availableAmbulances: 0,
   });
 
-  const [recentRequests] = useState([
-    { id: 1, patient: "Aarav Patel", hospital: "Apollo Hospital", type: "Accident", time: "3 min ago", status: "Critical" },
-    { id: 2, patient: "Priya Sharma", hospital: "Fortis Hospital", type: "Cardiac", time: "12 min ago", status: "High" },
-    { id: 3, patient: "Rohan Kumar", hospital: "Manipal Hospital", type: "Trauma", time: "28 min ago", status: "Medium" },
-    { id: 4, patient: "Sneha Rao", hospital: "Apollo Hospital", type: "Respiratory", time: "41 min ago", status: "High" },
-  ]);
+  // recentRequests demo removed; use real data sources for emergencies if available
+  const [recentRequests] = useState([]);
 
   const [hospitals, setHospitals] = useState([]);
   const [showHospitalModal, setShowHospitalModal] = useState(false);
@@ -30,6 +26,14 @@ export default function AdminDashboard() {
     phone: "",
     address: "",
     emergencyTypes: "",
+    // Latitude/Longitude removed — address will be geocoded automatically
+    totalBeds: "",
+    availableBeds: "",
+    totalAmbulances: "",
+    availableAmbulances: "",
+    isOnline: true,
+    emergencyContactName: "",
+    emergencyContactNumber: "",
   });
   const [isSubmittingHospital, setIsSubmittingHospital] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -49,7 +53,10 @@ export default function AdminDashboard() {
           Authorization: `Bearer ${token}`,
         },
       });
-      setHospitals(response.data.hospitals || []);
+      const list = response.data.hospitals || [];
+      setHospitals(list);
+      const totalAvailAmb = list.reduce((acc, cur) => acc + (Number(cur.availableAmbulances) || 0), 0);
+      setStats((s) => ({ ...s, totalHospitals: list.length, availableAmbulances: totalAvailAmb }));
     } catch (error) {
       console.error("Failed to load hospitals", error);
     }
@@ -87,6 +94,13 @@ export default function AdminDashboard() {
         phone: "",
         address: "",
         emergencyTypes: "",
+        totalBeds: "",
+        availableBeds: "",
+        totalAmbulances: "",
+        availableAmbulances: "",
+        isOnline: true,
+        emergencyContactName: "",
+        emergencyContactNumber: "",
       });
       setShowHospitalModal(false);
       await fetchHospitals();
@@ -96,6 +110,98 @@ export default function AdminDashboard() {
       console.error(error);
     } finally {
       setIsSubmittingHospital(false);
+    }
+  };
+
+  // Edit / Delete / Reset Password handlers
+  const [editMode, setEditMode] = useState(false);
+  const [editingHospitalId, setEditingHospitalId] = useState(null);
+  const [resetPasswordModal, setResetPasswordModal] = useState(false);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+
+  const handleEditClick = (hospital) => {
+    setEditMode(true);
+    setEditingHospitalId(hospital._id);
+    setHospitalForm({
+      name: hospital.name || "",
+      email: hospital.email || "",
+      password: "",
+      phone: hospital.phone || "",
+      address: hospital.address || "",
+      emergencyTypes: (hospital.emergencyTypes || []).join(", "),
+      // latitude/longitude are derived from address via geocoding
+      totalBeds: hospital.totalBeds || "",
+      availableBeds: hospital.availableBeds || "",
+      totalAmbulances: hospital.totalAmbulances || "",
+      availableAmbulances: hospital.availableAmbulances || "",
+      isOnline: hospital.isOnline !== undefined ? hospital.isOnline : true,
+      emergencyContactName: hospital.emergencyContactName || "",
+      emergencyContactNumber: hospital.emergencyContactNumber || "",
+    });
+    setShowHospitalModal(true);
+  };
+
+  const handleUpdateHospital = async (e) => {
+    e.preventDefault();
+    if (!editingHospitalId) return;
+    setIsSubmittingHospital(true);
+    try {
+      const token = localStorage.getItem("token");
+      const payload = {
+        ...hospitalForm,
+        emergencyTypes: hospitalForm.emergencyTypes
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      };
+      await API.put(`/admin/hospital/${editingHospitalId}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      showSuccessToast("Hospital updated");
+      setShowHospitalModal(false);
+      setEditMode(false);
+      setEditingHospitalId(null);
+      await fetchHospitals();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update hospital");
+      console.error(error);
+    } finally {
+      setIsSubmittingHospital(false);
+    }
+  };
+
+  const handleDeleteHospital = async (id) => {
+    if (!confirm("Delete this hospital? This will remove its account.")) return;
+    try {
+      const token = localStorage.getItem("token");
+      await API.delete(`/admin/hospital/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      showSuccessToast("Hospital deleted");
+      await fetchHospitals();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to delete hospital");
+      console.error(error);
+    }
+  };
+
+  const openResetPassword = (hospitalId) => {
+    setEditingHospitalId(hospitalId);
+    setResetPasswordModal(true);
+    setResetPasswordValue("");
+  };
+
+  const handleResetPassword = async () => {
+    if (!editingHospitalId) return;
+    if (!resetPasswordValue) return alert("Enter a new password");
+    try {
+      const token = localStorage.getItem("token");
+      await API.post(`/admin/hospital/${editingHospitalId}/reset-password`, { password: resetPasswordValue }, { headers: { Authorization: `Bearer ${token}` } });
+      showSuccessToast("Password reset successfully");
+      setResetPasswordModal(false);
+      setEditingHospitalId(null);
+      setResetPasswordValue("");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to reset password");
+      console.error(error);
     }
   };
 
@@ -238,12 +344,27 @@ export default function AdminDashboard() {
                         {h.isOnline ? "Online" : "Offline"}
                       </span>
                     </td>
-                    <td className="py-4 px-3">
+                    <td className="py-4 px-3 flex gap-2">
                       <button
                         type="button"
-                        className="px-4 py-2 rounded-2xl border border-slate-700 text-slate-300 hover:bg-slate-800"
+                        onClick={() => handleEditClick(h)}
+                        className="px-3 py-1 rounded-2xl border border-slate-700 text-slate-300 hover:bg-slate-800"
                       >
-                        View
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHospital(h._id)}
+                        className="px-3 py-1 rounded-2xl border border-red-600 text-red-400 hover:bg-red-800/10"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openResetPassword(h._id)}
+                        className="px-3 py-1 rounded-2xl border border-slate-700 text-slate-300 hover:bg-slate-800"
+                      >
+                        Reset PW
                       </button>
                     </td>
                   </tr>
@@ -315,7 +436,7 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <form onSubmit={handleCreateHospital} className="space-y-6">
+                <form onSubmit={editMode ? handleUpdateHospital : handleCreateHospital} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-slate-400 mb-2">Hospital Name</label>
@@ -370,6 +491,78 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div className="md:col-span-2">
+                      <p className="text-xs text-slate-500">Address will be geocoded automatically (Google Maps API if configured, otherwise OpenStreetMap is used)</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Total Beds</label>
+                      <input
+                        name="totalBeds"
+                        value={hospitalForm.totalBeds}
+                        onChange={handleHospitalChange}
+                        type="number"
+                        min="0"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Available Beds</label>
+                      <input
+                        name="availableBeds"
+                        value={hospitalForm.availableBeds}
+                        onChange={handleHospitalChange}
+                        type="number"
+                        min="0"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Total Ambulances</label>
+                      <input
+                        name="totalAmbulances"
+                        value={hospitalForm.totalAmbulances}
+                        onChange={handleHospitalChange}
+                        type="number"
+                        min="0"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Available Ambulances</label>
+                      <input
+                        name="availableAmbulances"
+                        value={hospitalForm.availableAmbulances}
+                        onChange={handleHospitalChange}
+                        type="number"
+                        min="0"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Emergency Contact Name</label>
+                      <input
+                        name="emergencyContactName"
+                        value={hospitalForm.emergencyContactName}
+                        onChange={handleHospitalChange}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Emergency Contact Number</label>
+                      <input
+                        name="emergencyContactNumber"
+                        value={hospitalForm.emergencyContactNumber}
+                        onChange={handleHospitalChange}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
                       <label className="block text-sm text-slate-400 mb-2">Emergency Types</label>
                       <input
                         name="emergencyTypes"
@@ -379,6 +572,13 @@ export default function AdminDashboard() {
                         className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
                         required
                       />
+                    </div>
+                    <div className="md:col-span-2 flex items-center gap-4">
+                      <label className="block text-sm text-slate-400">Hospital Status</label>
+                      <label className="inline-flex items-center gap-2 ml-4">
+                        <input type="checkbox" name="isOnline" checked={hospitalForm.isOnline} onChange={(e)=> setHospitalForm(prev=>({...prev, isOnline: e.target.checked}))} />
+                        <span className="text-sm text-slate-300">Online</span>
+                      </label>
                     </div>
                   </div>
 
@@ -395,10 +595,31 @@ export default function AdminDashboard() {
                       disabled={isSubmittingHospital}
                       className="px-6 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60"
                     >
-                      {isSubmittingHospital ? "Creating..." : "Create Hospital"}
+                      {isSubmittingHospital ? (editMode ? "Updating..." : "Creating...") : (editMode ? "Update Hospital" : "Create Hospital")}
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {resetPasswordModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+              <div className="w-full max-w-md bg-slate-950 border border-slate-700 rounded-3xl p-6 shadow-2xl">
+                <h3 className="text-xl font-semibold mb-4">Reset Hospital Password</h3>
+                <div className="space-y-4">
+                  <input
+                    type="password"
+                    placeholder="New password"
+                    value={resetPasswordValue}
+                    onChange={(e)=>setResetPasswordValue(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button onClick={()=>setResetPasswordModal(false)} className="px-4 py-2 rounded-2xl border border-slate-700">Cancel</button>
+                    <button onClick={handleResetPassword} className="px-4 py-2 rounded-2xl bg-blue-600 text-white">Reset</button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

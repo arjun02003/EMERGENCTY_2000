@@ -2,7 +2,6 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 dotenv.config({ path: path.join(__dirname, ".env") });
-console.log("MONGO_URI =", process.env.MONGO_URI);
 
 const express = require("express");
 const cors = require("cors");
@@ -13,6 +12,7 @@ const authRoutes = require("./routes/AuthRoutes");
 const hospitalRoutes = require("./routes/HospitalRoutes");
 const ambulanceRoutes = require("./routes/AmbulanceRoutes");
 const adminRoutes = require("./routes/AdminRoutes");
+const driverRoutes = require("./routes/DriverRoutes");
 
 const app = express();
 
@@ -54,6 +54,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/hospital", hospitalRoutes);
 app.use("/api/ambulance", ambulanceRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/driver", driverRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: "Endpoint not found" });
@@ -64,13 +65,47 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: err.message || "Server error" });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
+
+const http = require("http");
+const { Server } = require("socket.io");
 
 const startServer = async () => {
   try {
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
+    const server = http.createServer(app);
+
+    const io = new Server(server, {
+      cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST", "PUT"],
+        credentials: true,
+      },
+    });
+
+    // Simple rooms: user:<userId>, hospital:<userId>
+    io.on("connection", (socket) => {
+      console.log("Socket connected:", socket.id);
+
+      socket.on("join", (room) => {
+        socket.join(room);
+        console.log(`Socket ${socket.id} joined ${room}`);
+      });
+
+      socket.on("leave", (room) => {
+        socket.leave(room);
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Socket disconnected:", socket.id);
+      });
+    });
+
+    // attach io to app for controller access
+    app.set("io", io);
+
+    server.listen(PORT, () => {
+      console.log(`✅ Server + Socket.IO running on port ${PORT}`);
       console.log(`🌐 http://localhost:${PORT}`);
     });
   } catch (error) {

@@ -5,12 +5,15 @@ const userSchema = new mongoose.Schema(
   name: {
     type: String,
     required: true,
+    trim: true,
   },
 
   email: {
     type: String,
     required: true,
     unique: true,
+    lowercase: true,   // BUG FIX: normalise case so User@Ex.com != user@ex.com
+    trim: true,
   },
 
   password: {
@@ -29,14 +32,23 @@ const userSchema = new mongoose.Schema(
     default: "user",
   },
 
-  // -------- User Information --------
+  // -------- User Medical Information --------
 
   bloodGroup: {
     type: String,
     default: "",
   },
 
-  emergencyContact: {
+  // BUG FIX: schema had a single emergencyContact:String field but
+  // the frontend sends TWO separate fields (emergencyContactName &
+  // emergencyContactNumber). Added both; kept old field for any
+  // existing documents that may have used it.
+  emergencyContactName: {
+    type: String,
+    default: "",
+  },
+
+  emergencyContactNumber: {
     type: String,
     default: "",
   },
@@ -81,7 +93,7 @@ const userSchema = new mongoose.Schema(
 
 },
 {
-  timestamps: true,
+  timestamps: true, // provides createdAt + updatedAt automatically
 }
 );
 

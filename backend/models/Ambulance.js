@@ -15,6 +15,21 @@ const ambulanceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    driverEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+    password: {
+      type: String,
+      default: "",
+    },
+    driverStatus: {
+      type: String,
+      default: "Idle",
+    },
     vehicleNumber: {
       type: String,
       required: true,

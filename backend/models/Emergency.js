@@ -20,8 +20,19 @@ const emergencySchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "accepted", "rejected", "completed", "Ambulance Assigned"],
-      default: "pending",
+      enum: [
+        "PENDING",
+        "SEARCHING_HOSPITAL",
+        "WAITING_FOR_ACCEPTANCE",
+        "AMBULANCE_ASSIGNED",
+        "DRIVER_ACCEPTED",
+        "DRIVER_ON_THE_WAY",
+        "PATIENT_PICKED",
+        "HOSPITAL_REACHED",
+        "COMPLETED",
+        "NO_HOSPITAL_AVAILABLE",
+      ],
+      default: "PENDING",
     },
 
     hospital: {
@@ -49,6 +60,25 @@ const emergencySchema = new mongoose.Schema(
     assignedHospital: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Hospital",
+    },
+
+    // Queue of hospital ids to attempt (ordered)
+    searchQueue: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Hospital",
+      },
+    ],
+
+    // Index into searchQueue of current target
+    currentHospitalIndex: {
+      type: Number,
+      default: 0,
+    },
+
+    emergencyType: {
+      type: String,
+      default: "General",
     },
 
     distance: {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import API from "../api/.api";
+import { io } from "socket.io-client";
 import { 
   Bed, Ambulance, AlertTriangle, User, CheckCircle, XCircle, LogOut, Bell, Edit, Trash 
 } from "lucide-react";
@@ -30,6 +31,8 @@ export default function HospitalDashboard() {
   const [ambulanceForm, setAmbulanceForm] = useState({
     driverName: "",
     driverPhone: "",
+    driverEmail: "",
+    password: "",
     vehicleNumber: "",
     vehicleType: "",
     status: "Available",
@@ -164,6 +167,8 @@ export default function HospitalDashboard() {
       const payload = {
         driverName: ambulanceForm.driverName,
         driverPhone: ambulanceForm.driverPhone,
+        driverEmail: ambulanceForm.driverEmail,
+        password: ambulanceForm.password,
         vehicleNumber: ambulanceForm.vehicleNumber,
         vehicleType: ambulanceForm.vehicleType,
         status: ambulanceForm.status,
@@ -185,6 +190,8 @@ export default function HospitalDashboard() {
       setAmbulanceForm({
         driverName: "",
         driverPhone: "",
+        driverEmail: "",
+        password: "",
         vehicleNumber: "",
         vehicleType: "",
         status: "Available",
@@ -204,6 +211,8 @@ export default function HospitalDashboard() {
     setAmbulanceForm({
       driverName: ambulance.driverName,
       driverPhone: ambulance.driverPhone,
+      driverEmail: ambulance.driverEmail || "",
+      password: "",
       vehicleNumber: ambulance.vehicleNumber,
       vehicleType: ambulance.vehicleType,
       status: ambulance.status,
@@ -246,6 +255,29 @@ export default function HospitalDashboard() {
 
     loadHospitalPage();
   }, []);
+
+  // Socket.IO: listen for new emergency requests targeted to this hospital
+  useEffect(() => {
+    if (!hospitalData) return;
+    const token = localStorage.getItem("token");
+    const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
+    const socket = io(socketUrl, { auth: { token }, transports: ["websocket"] });
+
+    // join hospital room using current user id
+    const storedUser = localStorage.getItem("user");
+    let userId = null;
+    if (storedUser) {
+      try { userId = JSON.parse(storedUser)._id || JSON.parse(storedUser).id; } catch (_) { userId = null; }
+    }
+    if (userId) socket.emit("join", `hospital:${userId}`);
+
+    socket.on("new_emergency_request", (payload) => {
+      console.log("New emergency request via socket:", payload);
+      fetchEmergencies();
+    });
+
+    return () => socket.disconnect();
+  }, [hospitalData]);
 
   const handleAccept = async (id) => {
     try {
@@ -505,6 +537,28 @@ export default function HospitalDashboard() {
                 onChange={handleAmbulanceChange}
                 className="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-white"
                 required
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-2">Driver Email</label>
+              <input
+                type="email"
+                name="driverEmail"
+                value={ambulanceForm.driverEmail}
+                onChange={handleAmbulanceChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                placeholder="driver@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-2">Driver Password</label>
+              <input
+                type="password"
+                name="password"
+                value={ambulanceForm.password}
+                onChange={handleAmbulanceChange}
+                className="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-3 text-white"
+                placeholder="Leave blank to keep existing password"
               />
             </div>
             <div>
