@@ -44,6 +44,15 @@ const ambulanceSchema = new mongoose.Schema(
       enum: ["Available", "Busy", "Offline"],
       default: "Available",
     },
+    // Live GPS coordinates updated by driver during active trip
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -11,6 +11,7 @@ const {
   patientPicked,
   reachHospital,
   completeTrip,
+  updateLocation,
 } = require("../controllers/DriverController");
 
 router.post("/login", loginDriver);
@@ -21,5 +22,6 @@ router.put("/reach-patient", protect, driverOnly, reachPatient);
 router.put("/patient-picked", protect, driverOnly, patientPicked);
 router.put("/reach-hospital", protect, driverOnly, reachHospital);
 router.put("/complete", protect, driverOnly, completeTrip);
+router.put("/location", protect, driverOnly, updateLocation);
 
 module.exports = router;

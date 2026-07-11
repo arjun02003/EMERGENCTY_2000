@@ -9,6 +9,7 @@ import HospitalDashboard from "../pages/HospitalDashboard";
 import AdminDashboard from "../pages/AdminDashboard";
 import DriverLogin from "../pages/DriverLogin";
 import DriverDashboard from "../pages/DriverDashboard";
+import EmergencyTracking from "../pages/EmergencyTracking";
 
 export default function AppRoutes() {
   return (
@@ -26,6 +27,9 @@ export default function AppRoutes() {
 
         {/* Hospital */}
         <Route path="/hospital-dashboard" element={<HospitalDashboard />} />
+
+        {/* Live Tracking */}
+        <Route path="/tracking" element={<EmergencyTracking />} />
 
         {/* Driver */}
         <Route path="/driver-login" element={<DriverLogin />} />

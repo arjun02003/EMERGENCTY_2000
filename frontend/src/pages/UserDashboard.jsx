@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import API from "../api/.api";
 import { io } from "socket.io-client";
@@ -6,10 +6,11 @@ import {
   User, Phone, Clock, MapPin, Hospital, AlertTriangle, 
   History, LogOut, Heart, Ambulance, Mail, Shield, Calendar, Droplets
 } from "lucide-react";
+import LiveTrackingMap from "../components/LiveTrackingMap";
 
 export default function UserDashboard() {
   // BUG FIX: Original code initialised `user` with hardcoded fake data
-  // ("Rahul Sharma", "O+", etc.). These defaults were always visible because
+  // (\"Rahul Sharma\", \"O+\", etc.). These defaults were always visible because
   // the real data from localStorage never matched the expected nested shape
   // (user.emergencyContact.name vs the flat fields the backend actually returns).
   // Initialise as null; show a loading state until real data is ready.
@@ -29,6 +30,13 @@ export default function UserDashboard() {
 
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+
+  // ── Live-tracking state ──────────────────────────────────────────────────
+  const [userLocation, setUserLocation] = useState(null);       // captured at SOS
+  const [ambulanceLoc, setAmbulanceLoc] = useState(null);       // updated via socket
+  const [hospitalLoc, setHospitalLoc] = useState(null);         // from emergency data
+  const [emergencyStatus, setEmergencyStatus] = useState(null); // e.g. DRIVER_ON_THE_WAY
+  const [liveSpeed, setLiveSpeed] = useState(null);
 
   const navigate = useNavigate();
 
@@ -88,6 +96,8 @@ export default function UserDashboard() {
     socket.on("emergency_status", (payload) => {
       console.log("Socket emergency_status:", payload);
       const { status, emergency } = payload;
+      setEmergencyStatus(status);
+
       if (status === "SEARCHING_HOSPITAL") {
         setIsEmergencyActive(true);
         setAssignedHospital({ name: "Searching for hospitals...", distance: "Finding..." });
@@ -96,13 +106,38 @@ export default function UserDashboard() {
         setAssignedHospital({ name: "Awaiting hospital response", distance: "Finding..." });
       } else if (status === "AMBULANCE_ASSIGNED") {
         setIsEmergencyActive(true);
-        setAssignedHospital({ name: emergency.assignedHospital?.name || "Assigned Hospital", distance: emergency.distance ? `${emergency.distance.toFixed(2)} km` : "-" });
+        setAssignedHospital({
+          name: emergency.assignedHospital?.name || "Assigned Hospital",
+          distance: emergency.distance ? `${emergency.distance.toFixed(2)} km` : "-",
+        });
         setAmbulanceInfo({
           number: emergency.ambulance?.vehicleNumber || "-",
           driver: emergency.ambulance?.driverName || "-",
           eta: "Calculating",
           status: "On the way",
         });
+        // Grab hospital coordinates for the map
+        const hosp = emergency.assignedHospital;
+        if (hosp?.location?.latitude && hosp?.location?.longitude) {
+          setHospitalLoc({ latitude: hosp.location.latitude, longitude: hosp.location.longitude });
+        }
+
+        // ── Save to localStorage and go to full-screen tracking ────────────
+        const storedUserLoc = JSON.parse(localStorage.getItem("sosLocation") || "null");
+        localStorage.setItem("activeEmergency", JSON.stringify({
+          emergencyId: emergency._id,
+          status: "AMBULANCE_ASSIGNED",
+          driverName:    emergency.ambulance?.driverName    || "-",
+          driverPhone:   emergency.ambulance?.driverPhone   || "",
+          vehicleNumber: emergency.ambulance?.vehicleNumber || "-",
+          vehicleType:   emergency.ambulance?.vehicleType   || "Ambulance",
+          hospitalName:  hosp?.name || "-",
+          hospitalLat:   hosp?.location?.latitude  || null,
+          hospitalLng:   hosp?.location?.longitude || null,
+          patientLat: storedUserLoc?.latitude  || null,
+          patientLng: storedUserLoc?.longitude || null,
+        }));
+        navigate("/tracking");
       } else if (status === "NO_HOSPITAL_AVAILABLE") {
         setIsEmergencyActive(false);
         setAssignedHospital(null);
@@ -110,9 +145,23 @@ export default function UserDashboard() {
       }
     });
 
+    // ── Live ambulance location updates ─────────────────────────────────────
+    socket.on("ambulance_location_update", (payload) => {
+      console.log("ambulance_location_update:", payload);
+      setAmbulanceLoc({ latitude: payload.latitude, longitude: payload.longitude });
+      setEmergencyStatus(payload.emergencyStatus || null);
+      if (payload.speed != null) setLiveSpeed(payload.speed);
+
+      // If we didn't have hospital coords yet, try from payload
+      if (!hospitalLoc && payload.hospitalLatitude && payload.hospitalLongitude) {
+        setHospitalLoc({ latitude: payload.hospitalLatitude, longitude: payload.hospitalLongitude });
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // No demo hospital history; real history should come from server-side emergencies
@@ -140,6 +189,10 @@ export default function UserDashboard() {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
+
+          // Store patient GPS for tracking page
+          setUserLocation({ latitude, longitude });
+          localStorage.setItem("sosLocation", JSON.stringify({ latitude, longitude }));
 
           const response = await API.post(
             "/emergency/create",
@@ -189,6 +242,9 @@ export default function UserDashboard() {
       return "—";
     }
   };
+
+  // Determine whether to show the map
+  const showMap = isEmergencyActive && ambulanceLoc;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -421,6 +477,48 @@ export default function UserDashboard() {
               )}
             </div>
           </div>
+
+          {/* ── LIVE TRACKING MAP — shown when emergency is active ─────────── */}
+          {showMap && (
+            <div className="lg:col-span-12">
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                  <h3 className="text-xl font-semibold">Live Ambulance Tracking</h3>
+                  <span className="ml-auto text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full font-medium">
+                    LIVE
+                  </span>
+                </div>
+
+                {/* Ambulance info bar */}
+                {ambulanceInfo.number !== "KA-05-AB-6789" && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    {[
+                      { label: "Ambulance", value: ambulanceInfo.number },
+                      { label: "Driver", value: ambulanceInfo.driver },
+                      { label: "Status", value: ambulanceInfo.status },
+                      { label: "Hospital", value: assignedHospital?.name || "—" },
+                    ].map((item) => (
+                      <div key={item.label} className="bg-slate-800 rounded-xl p-3">
+                        <p className="text-xs text-slate-400">{item.label}</p>
+                        <p className="text-sm font-semibold mt-0.5 truncate">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <LiveTrackingMap
+                  userLocation={userLocation}
+                  ambulanceLoc={ambulanceLoc}
+                  hospitalLocation={hospitalLoc}
+                  emergencyStatus={emergencyStatus}
+                  speed={liveSpeed}
+                  mapHeight="480px"
+                  label="🚑 Ambulance is on the way"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Emergency Contacts & History — UNCHANGED layout, fixed field names */}
           <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-2 gap-6">

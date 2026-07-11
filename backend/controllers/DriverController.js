@@ -299,3 +299,73 @@ exports.completeTrip = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message || "Failed to complete trip" });
   }
 };
+
+// NEW: Update driver GPS location and broadcast via Socket.IO
+exports.updateLocation = async (req, res) => {
+  try {
+    const { latitude, longitude, speed } = req.body;
+
+    if (typeof latitude !== "number" || typeof longitude !== "number") {
+      return res.status(400).json({ success: false, message: "latitude and longitude must be numbers" });
+    }
+
+    const ambulance = await Ambulance.findById(req.user.id);
+    if (!ambulance) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
+
+    // Persist latest GPS on the ambulance document
+    ambulance.latitude = latitude;
+    ambulance.longitude = longitude;
+    await ambulance.save();
+
+    // Find the active emergency for this ambulance
+    const emergency = await Emergency.findOne({
+      ambulance: ambulance._id,
+      status: {
+        $in: [
+          "AMBULANCE_ASSIGNED",
+          "DRIVER_ACCEPTED",
+          "DRIVER_ON_THE_WAY",
+          "PATIENT_PICKED",
+          "HOSPITAL_REACHED",
+        ],
+      },
+    }).populate("assignedHospital", "name location");
+
+    const io = req.app.get("io");
+
+    if (io && emergency) {
+      const payload = {
+        ambulanceId: ambulance._id,
+        latitude,
+        longitude,
+        speed: speed || null,
+        emergencyId: emergency._id,
+        emergencyStatus: emergency.status,
+        // Include coordinates of patient and hospital so clients can update their maps
+        patientLatitude: emergency.latitude,
+        patientLongitude: emergency.longitude,
+        hospitalLatitude: emergency.assignedHospital?.location?.latitude || null,
+        hospitalLongitude: emergency.assignedHospital?.location?.longitude || null,
+        timestamp: Date.now(),
+      };
+
+      // Emit to: the user in distress, the hospital dashboard, and the driver themselves
+      io.to(`user:${emergency.user.toString()}`).emit("ambulance_location_update", payload);
+      if (emergency.assignedHospital?.user) {
+        io.to(`hospital:${emergency.assignedHospital.user.toString()}`).emit("ambulance_location_update", payload);
+      }
+      io.to(`driver:${ambulance._id.toString()}`).emit("ambulance_location_update", payload);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Location updated",
+      location: { latitude, longitude },
+    });
+  } catch (error) {
+    console.error("Update location error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Failed to update location" });
+  }
+};

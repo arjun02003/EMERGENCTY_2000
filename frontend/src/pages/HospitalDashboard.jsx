@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import { 
   Bed, Ambulance, AlertTriangle, User, CheckCircle, XCircle, LogOut, Bell, Edit, Trash 
 } from "lucide-react";
+import LiveTrackingMap from "../components/LiveTrackingMap";
 
 export default function HospitalDashboard() {
   const [hospital, setHospital] = useState({
@@ -45,6 +46,14 @@ export default function HospitalDashboard() {
   const [emergencies, setEmergencies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [queue, setQueue] = useState([]);
+
+  // ── Live tracking state (hospital observes ambulance) ─────────────────────
+  const [trackingAmbulanceLoc, setTrackingAmbulanceLoc] = useState(null);
+  const [trackingPatientLoc, setTrackingPatientLoc] = useState(null);
+  const [trackingHospitalLoc, setTrackingHospitalLoc] = useState(null);
+  const [trackingStatus, setTrackingStatus] = useState(null);
+  const [trackingSpeed, setTrackingSpeed] = useState(null);
+  const [hasActiveLiveTrip, setHasActiveLiveTrip] = useState(false);
 
   // Fetch Pending Emergencies
   const fetchEmergencies = async () => {
@@ -274,6 +283,20 @@ export default function HospitalDashboard() {
     socket.on("new_emergency_request", (payload) => {
       console.log("New emergency request via socket:", payload);
       fetchEmergencies();
+    });
+
+    // ── Live ambulance tracking update ────────────────────────────────────
+    socket.on("ambulance_location_update", (payload) => {
+      setHasActiveLiveTrip(true);
+      setTrackingAmbulanceLoc({ latitude: payload.latitude, longitude: payload.longitude });
+      setTrackingStatus(payload.emergencyStatus || null);
+      if (payload.speed != null) setTrackingSpeed(payload.speed);
+      if (payload.patientLatitude && payload.patientLongitude) {
+        setTrackingPatientLoc({ latitude: payload.patientLatitude, longitude: payload.patientLongitude });
+      }
+      if (payload.hospitalLatitude && payload.hospitalLongitude) {
+        setTrackingHospitalLoc({ latitude: payload.hospitalLatitude, longitude: payload.hospitalLongitude });
+      }
     });
 
     return () => socket.disconnect();
@@ -751,10 +774,60 @@ export default function HospitalDashboard() {
             </div>
           </div>
 
-          {/* Right Sidebar - Queue, Map, Notifications */}
-          {/* (Same as previous version) */}
+          {/* Right Sidebar - Live Tracking + Queue */}
+          <div className="xl:col-span-5 space-y-6">
+
+            {/* ── LIVE AMBULANCE TRACKING MAP ─────────────────────────────── */}
+            {hasActiveLiveTrip && trackingAmbulanceLoc ? (
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+                  <h3 className="text-xl font-semibold">Live Ambulance Tracking</h3>
+                  <span className="ml-auto text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full font-medium">LIVE</span>
+                </div>
+                <p className="text-slate-400 text-sm mb-4">Watching your ambulance in real time</p>
+                <LiveTrackingMap
+                  userLocation={trackingPatientLoc}
+                  ambulanceLoc={trackingAmbulanceLoc}
+                  hospitalLocation={trackingHospitalLoc}
+                  emergencyStatus={trackingStatus}
+                  speed={trackingSpeed}
+                  mapHeight="380px"
+                  label="🏥 Hospital View — Live"
+                />
+              </div>
+            ) : (
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="text-xl font-semibold">Live Ambulance Tracking</h3>
+                </div>
+                <div className="rounded-2xl bg-slate-950 border border-slate-800 p-10 flex flex-col items-center justify-center gap-3 text-slate-500">
+                  <div className="text-4xl">🚑</div>
+                  <p className="text-sm text-center">Live tracking will appear here once a driver starts their trip and begins broadcasting GPS.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Queue */}
+            {queue.length > 0 && (
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6">
+                <h3 className="text-xl font-semibold mb-4">Active Queue</h3>
+                <div className="space-y-3">
+                  {queue.map((item) => (
+                    <div key={item.id} className="bg-slate-950 rounded-2xl p-4 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{item.patient}</p>
+                        <p className="text-xs text-slate-400">{item.status}</p>
+                      </div>
+                      <span className="text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full">{item.ambulance}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-}
+}
