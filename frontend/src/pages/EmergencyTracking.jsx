@@ -12,6 +12,10 @@ import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+// Fix for Vite production worker transpilation bug
+import MapboxWorker from "mapbox-gl/dist/mapbox-gl-csp-worker?worker";
+mapboxgl.workerClass = MapboxWorker;
+
 import API from "../api/.api";
 import { haversineDistance, formatDistance, lerp } from "../utils/trackingUtils";
 

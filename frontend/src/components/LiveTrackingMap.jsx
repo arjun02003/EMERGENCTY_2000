@@ -14,6 +14,10 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+// Fix for Vite production worker transpilation bug
+import MapboxWorker from "mapbox-gl/dist/mapbox-gl-csp-worker?worker";
+mapboxgl.workerClass = MapboxWorker;
+
 import {
   USER_ICON_SVG,
   AMBULANCE_ICON_SVG,
