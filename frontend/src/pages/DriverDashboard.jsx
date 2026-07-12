@@ -317,11 +317,11 @@ export default function DriverDashboard() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl bg-slate-950/70 p-4 border border-slate-800">
                     <p className="text-slate-400 text-sm">Patient Name</p>
-                    <p className="text-lg font-semibold">{emergency.patient.name}</p>
+                    <p className="text-lg font-semibold">{emergency.patient?.name || "Unknown"}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-950/70 p-4 border border-slate-800">
                     <p className="text-slate-400 text-sm">Patient Phone</p>
-                    <p className="text-lg font-semibold">{emergency.patient.phone}</p>
+                    <p className="text-lg font-semibold">{emergency.patient?.phone || "-"}</p>
                   </div>
                 </div>
 
@@ -339,7 +339,9 @@ export default function DriverDashboard() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl bg-slate-950/70 p-4 border border-slate-800">
                     <p className="text-slate-400 text-sm">Pickup Location</p>
-                    <p className="text-lg font-semibold">{emergency.pickupLocation.latitude}, {emergency.pickupLocation.longitude}</p>
+                    <p className="text-lg font-semibold">
+                      {emergency.pickupLocation?.latitude ?? "-"}, {emergency.pickupLocation?.longitude ?? "-"}
+                    </p>
                   </div>
                   <div className="rounded-2xl bg-slate-950/70 p-4 border border-slate-800">
                     <p className="text-slate-400 text-sm">Assigned Hospital Phone</p>
