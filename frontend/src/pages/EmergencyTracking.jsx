@@ -204,7 +204,7 @@ export default function EmergencyTracking() {
     const uid   = user._id || user.id;
     if (!uid || !token) return;
 
-    const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000", {
+    const socket = io(import.meta.env.VITE_API_URL || "https://emergency-2000.onrender.com", {
       auth: { token },
       transports: ["websocket"],
     });
