@@ -18,32 +18,32 @@ const app = express();
 
 // ── CORS Configuration (Production-Ready) ─────────────────────────────────────
 const allowedOrigins = [
-  // Local development
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:5175",
   "http://127.0.0.1:5173",
   "http://127.0.0.1:5174",
   "http://127.0.0.1:5175",
-  // Production (Vercel)
   "https://emergency-2000.vercel.app",
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
 
-    // Exact match
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Dynamic checks
+    const isAllowed = 
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app") ||
+      /^https:\/\/emergency-2000.*\.vercel\.app$/.test(origin) ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1");
 
-    // Allow any Vercel preview deployment (e.g. emergency-2000-***.vercel.app)
-    if (/^https:\/\/emergency-2000.*\.vercel\.app$/.test(origin)) return callback(null, true);
+    if (isAllowed) {
+      return callback(null, true);
+    }
 
-    // Reject — but do NOT throw an Error. Throwing causes Express error handler
-    // to fire WITHOUT CORS headers, which makes the browser show the generic
-    // "No Access-Control-Allow-Origin" message instead of a clean rejection.
-    console.warn(`⚠️  CORS blocked origin: ${origin}`);
+    console.warn(`⚠️ CORS blocked origin: ${origin}`);
     return callback(null, false);
   },
   credentials: true,
@@ -55,16 +55,19 @@ const corsOptions = {
     "Accept",
     "Origin",
   ],
-  optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
+  optionsSuccessStatus: 200,
 };
 
-// 1) CORS middleware — MUST be first, before body parsers and routes
+// 1) Apply CORS headers to all routes
 app.use(cors(corsOptions));
 
-// 2) Explicit preflight handler for ALL routes — guarantees OPTIONS works
-//    even if Render's reverse proxy or a middleware short-circuits the request
-//    Express 5 requires named wildcard params instead of '*'
-app.options("{*path}", cors(corsOptions));
+// 2) Catch preflight OPTIONS requests globally and return 200 immediately
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // 3) Body parsers
 app.use(express.json());
