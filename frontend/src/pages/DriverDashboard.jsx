@@ -67,7 +67,7 @@ export default function DriverDashboard() {
   // ── Socket.IO ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!driver) return;
-    const socketUrl = import.meta.env.VITE_API_URL || "https://emergency-2000.onrender.com";
+    const socketUrl = import.meta.env.VITE_API_URL || "https://emergencty-2000.onrender.com";
     const socket = io(socketUrl, {
       auth: { token: localStorage.getItem("token") },
       transports: ["websocket"],

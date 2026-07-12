@@ -35,7 +35,7 @@ const corsOptions = {
     const isAllowed = 
       allowedOrigins.includes(origin) ||
       origin.endsWith(".vercel.app") ||
-      /^https:\/\/emergency-2000.*\.vercel\.app$/.test(origin) ||
+      /^https:\/\/(emergency-2000|emergencty-2000).*\.vercel\.app$/.test(origin) ||
       origin.includes("localhost") ||
       origin.includes("127.0.0.1");
 

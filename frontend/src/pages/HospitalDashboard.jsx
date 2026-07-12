@@ -269,7 +269,7 @@ export default function HospitalDashboard() {
   useEffect(() => {
     if (!hospitalData) return;
     const token = localStorage.getItem("token");
-    const socketUrl = import.meta.env.VITE_API_URL || "https://emergency-2000.onrender.com";
+    const socketUrl = import.meta.env.VITE_API_URL || "https://emergencty-2000.onrender.com";
     const socket = io(socketUrl, { auth: { token }, transports: ["websocket"] });
 
     // join hospital room using current user id
